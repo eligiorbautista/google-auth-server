@@ -6,9 +6,12 @@ import session from "express-session";
 import cookieParser from "cookie-parser";
 import User from "./db/models/User.mjs";
 import GoogleUser from "./db/models/GoogleUser.mjs";
+import FacebookUser from "./db/models/FacebookUser.mjs";
 import { hashPassword } from "./utils/passwordHelper.mjs";
 import "./strategies/localStrategy.mjs";
 import "./strategies/googleStrategy.mjs";
+
+import "./strategies/facebookStrategy.mjs";
 import cors from "cors";
 import dotenv from "dotenv";
 
@@ -47,7 +50,14 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 passport.serializeUser((user, done) => {
-  const userType = user.googleId ? "google" : "local";
+  let userType;
+  if (user.googleId) {
+    userType = "google";
+  } else if (user.facebookId) {
+    userType = "facebook";
+  } else {
+    userType = "local";
+  }
   done(null, { id: user.id, type: userType });
 });
 
@@ -56,6 +66,8 @@ passport.deserializeUser(async (obj, done) => {
     let user;
     if (obj.type === "google") {
       user = await GoogleUser.findById(obj.id);
+    } else if (obj.type === "facebook") {
+      user = await FacebookUser.findById(obj.id);
     } else {
       user = await User.findById(obj.id);
     }
@@ -110,6 +122,22 @@ app.get(
 app.get(
   "/api/auth/google/redirect",
   passport.authenticate("google", { failureRedirect: "/" }),
+  (req, res) => {
+    // Successful authentication, send user info
+    res.redirect("/api/auth/status");
+  }
+);
+
+// LOGIN USER VIA FACEBOOK
+app.get(
+  "/api/auth/facebook",
+  passport.authenticate("facebook", { scope: ["email"] })
+);
+
+// HANDLE FACEBOOK REDIRECT (for both Login and Registration)
+app.get(
+  "/api/auth/facebook/redirect",
+  passport.authenticate("facebook", { failureRedirect: "/login" }),
   (req, res) => {
     // Successful authentication, send user info
     res.redirect("/api/auth/status");
